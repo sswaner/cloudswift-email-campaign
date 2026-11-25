@@ -27,11 +27,13 @@ export async function loadTokenKeys(): Promise<TokenKeys> {
 
   const parsed = JSON.parse(response.SecretString);
   const keys: TokenKeys = {};
-  for (const [kid, keyB64] of Object.entries(parsed)) {
-    if (typeof keyB64 !== 'string') {
+  for (const [kid, keyValue] of Object.entries(parsed)) {
+    if (typeof keyValue !== 'string') {
       throw new Error(`Invalid key value for ${kid}`);
     }
-    keys[kid] = Buffer.from(keyB64, 'base64url');
+    // Support both raw strings (from CDK-generated secret) and base64url-encoded keys
+    const isBase64Url = /^[A-Za-z0-9_-]+$/.test(keyValue) && keyValue.length % 4 !== 1 && Buffer.from(keyValue, 'base64url').toString('base64url') === keyValue;
+    keys[kid] = isBase64Url ? Buffer.from(keyValue, 'base64url') : Buffer.from(keyValue, 'utf-8');
   }
 
   cachedKeys = keys;

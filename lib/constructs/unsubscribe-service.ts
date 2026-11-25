@@ -19,6 +19,7 @@ export interface UnsubscribeServiceProps {
   eventBucket: s3.IBucket;
   listBucket: s3.IBucket;
   inboundBucket: s3.IBucket;
+  contactsTable: dynamodb.ITable;
   recipientsTable: dynamodb.ITable;
   suppressionTable: dynamodb.ITable;
   subscriptionLedgerTable: dynamodb.ITable;
@@ -31,7 +32,7 @@ export class UnsubscribeService extends Construct {
 
   constructor(scope: Construct, id: string, props: UnsubscribeServiceProps) {
     super(scope, id);
-    const { config, eventBucket, inboundBucket, recipientsTable, suppressionTable, subscriptionLedgerTable } = props;
+    const { config, eventBucket, inboundBucket, contactsTable, recipientsTable, suppressionTable, subscriptionLedgerTable } = props;
 
     // Allow SES to write inbound mail to the bucket
     inboundBucket.addToResourcePolicy(
@@ -72,6 +73,7 @@ export class UnsubscribeService extends Construct {
     // Shared Lambda environment
     const lambdaEnv: { [key: string]: string } = {
       UNSUB_TOKENS_TABLE: this.unsubTokensTable.tableName,
+      CONTACTS_TABLE: contactsTable.tableName,
       RECIPIENTS_TABLE: recipientsTable.tableName,
       SUPPRESSION_TABLE: suppressionTable.tableName,
       SUBSCRIPTION_LEDGER_TABLE: subscriptionLedgerTable.tableName,
@@ -94,6 +96,7 @@ export class UnsubscribeService extends Construct {
       },
     });
     this.unsubTokensTable.grantReadData(unsubFn);
+    contactsTable.grantReadData(unsubFn);
     recipientsTable.grantReadWriteData(unsubFn);
     suppressionTable.grantReadWriteData(unsubFn);
     subscriptionLedgerTable.grantWriteData(unsubFn);
@@ -114,6 +117,7 @@ export class UnsubscribeService extends Construct {
       },
     });
     this.unsubTokensTable.grantReadData(mailtoFn);
+    contactsTable.grantReadData(mailtoFn);
     recipientsTable.grantReadData(mailtoFn);
     suppressionTable.grantReadWriteData(mailtoFn);
     subscriptionLedgerTable.grantWriteData(mailtoFn);

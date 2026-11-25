@@ -1,22 +1,25 @@
-import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, DeleteCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { ulid } from 'ulidx';
 
 const ddbClient = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(ddbClient);
 
 export interface UnsubscribeEvent {
   emailHash: string;
-  campaignId: string;
+  contactId: string;
+  campaignId?: string;
   recipientId?: string;
   method: 'one_click' | 'landing_page' | 'mailto' | 'manual';
   reason?: string;
   scope: 'global';
-  sourceCampaignId: string;
+  sourceCampaignId?: string;
   unsubscribedAt: string;
 }
 
 export interface SubscribeEvent {
   emailHash: string;
+  contactId: string;
   method: 'confirmed_opt_in' | 'operator_recorded';
   evidence: string;
   scope: 'global';
@@ -58,7 +61,7 @@ export async function recordUnsubscribe(event: UnsubscribeEvent): Promise<Suppre
   const eventBucket = getEnv('EVENT_BUCKET');
 
   const now = event.unsubscribedAt;
-  const eventId = `unsub_${now}_${event.emailHash.slice(0, 8)}`;
+  const eventId = `unsub_${now}_${event.emailHash.slice(0, 8)}_${ulid()}`;
 
   // Idempotent suppression write
   const existing = await docClient.send(
@@ -74,10 +77,11 @@ export async function recordUnsubscribe(event: UnsubscribeEvent): Promise<Suppre
         TableName: suppressionTable,
         Item: {
           email_hash: event.emailHash,
+          contact_id: event.contactId,
           scope: event.scope,
           reason: 'UNSUBSCRIBE',
           method: event.method,
-          source_campaign_id: event.campaignId,
+          source_campaign_id: event.sourceCampaignId ?? null,
           first_at: now,
           last_at: now,
           count: 1,
@@ -90,9 +94,13 @@ export async function recordUnsubscribe(event: UnsubscribeEvent): Promise<Suppre
       new UpdateCommand({
         TableName: suppressionTable,
         Key: { email_hash: event.emailHash },
-        UpdateExpression: 'SET last_at = :now ADD count :one',
+        UpdateExpression: 'SET last_at = :now, contact_id = :contactId ADD #count :one',
+        ExpressionAttributeNames: {
+          '#count': 'count',
+        },
         ExpressionAttributeValues: {
           ':now': now,
+          ':contactId': event.contactId,
           ':one': 1,
         },
       }),
@@ -106,12 +114,13 @@ export async function recordUnsubscribe(event: UnsubscribeEvent): Promise<Suppre
       Item: {
         email_hash: event.emailHash,
         ts_event_id: `${now}#${eventId}`,
+        contact_id: event.contactId,
         event_type: 'unsubscribe',
         scope: event.scope,
         method: event.method,
         reason: event.reason ?? null,
-        campaign_id: event.campaignId,
-        source_campaign_id: event.sourceCampaignId,
+        campaign_id: event.campaignId ?? null,
+        source_campaign_id: event.sourceCampaignId ?? null,
         recipient_id: event.recipientId ?? null,
         at: now,
       },
@@ -127,13 +136,14 @@ export async function recordUnsubscribe(event: UnsubscribeEvent): Promise<Suppre
           campaign_id: event.campaignId,
           recipient_id: event.recipientId,
         },
-        UpdateExpression: 'SET unsubscribed_at = :now, unsub_method = :method, #status = :status',
+        UpdateExpression: 'SET unsubscribed_at = :now, unsub_method = :method, contact_id = :contactId, #status = :status',
         ExpressionAttributeNames: {
           '#status': 'status',
         },
         ExpressionAttributeValues: {
           ':now': now,
           ':method': event.method,
+          ':contactId': event.contactId,
           ':status': 'UNSUBSCRIBED',
         },
       }),
@@ -144,7 +154,7 @@ export async function recordUnsubscribe(event: UnsubscribeEvent): Promise<Suppre
   try {
     const { S3Client, PutObjectCommand } = await import('@aws-sdk/client-s3');
     const s3 = new S3Client({});
-    const dt = now.slice(0, 10).replace(/-/g, '-'); // assuming ISO string
+    const dt = now.slice(0, 10);
     await s3.send(
       new PutObjectCommand({
         Bucket: eventBucket,
@@ -155,7 +165,8 @@ export async function recordUnsubscribe(event: UnsubscribeEvent): Promise<Suppre
           source: 'unsub',
           ts: now,
           domain_id: 'lexara',
-          campaign_id: event.campaignId,
+          contact_id: event.contactId,
+          campaign_id: event.campaignId ?? null,
           recipient_id: event.recipientId ?? null,
           email_hash: event.emailHash,
           method: event.method,
@@ -181,7 +192,7 @@ export async function recordSubscribe(event: SubscribeEvent): Promise<void> {
   const eventBucket = getEnv('EVENT_BUCKET');
 
   const now = event.confirmedAt;
-  const eventId = `sub_${now}_${event.emailHash.slice(0, 8)}`;
+  const eventId = `sub_${now}_${event.emailHash.slice(0, 8)}_${ulid()}`;
 
   // Remove from suppression table
   try {
@@ -206,6 +217,7 @@ export async function recordSubscribe(event: SubscribeEvent): Promise<void> {
       Item: {
         email_hash: event.emailHash,
         ts_event_id: `${now}#${eventId}`,
+        contact_id: event.contactId,
         event_type: 'subscribe',
         scope: event.scope,
         method: event.method,
@@ -234,6 +246,7 @@ export async function recordSubscribe(event: SubscribeEvent): Promise<void> {
           source: 'unsub',
           ts: now,
           domain_id: 'lexara',
+          contact_id: event.contactId,
           email_hash: event.emailHash,
           method: event.method,
           evidence: event.evidence,
@@ -244,4 +257,22 @@ export async function recordSubscribe(event: SubscribeEvent): Promise<void> {
   } catch (err) {
     console.error('Failed to write event lake object', err);
   }
+}
+
+export async function resolveContactByEmailHash(emailHash: string): Promise<{ contactId: string; email?: string } | null> {
+  const contactsTable = getEnv('CONTACTS_TABLE');
+  const result = await docClient.send(
+    new QueryCommand({
+      TableName: contactsTable,
+      IndexName: 'by-email-hash',
+      KeyConditionExpression: 'email_hash = :h',
+      ExpressionAttributeValues: { ':h': emailHash },
+      Limit: 1,
+    }),
+  );
+  if (!result.Items || result.Items.length === 0) return null;
+  return {
+    contactId: result.Items[0].contact_id as string,
+    email: result.Items[0].email as string,
+  };
 }

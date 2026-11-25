@@ -26,6 +26,7 @@ export class CloudswiftEmailCampaignStack extends cdk.Stack {
       eventBucket: dataLayer.eventBucket,
       listBucket: dataLayer.listBucket,
       inboundBucket: dataLayer.inboundBucket,
+      contactsTable: dataLayer.contactsTable,
       recipientsTable: dataLayer.recipientsTable,
       suppressionTable: dataLayer.suppressionTable,
       subscriptionLedgerTable: dataLayer.subscriptionLedgerTable,

@@ -17,6 +17,7 @@ export class DataLayer extends Construct {
   public readonly encryptionKey: kms.Key;
 
   // DynamoDB tables
+  public readonly contactsTable: dynamodb.Table;
   public readonly sendingDomainsTable: dynamodb.Table;
   public readonly listsTable: dynamodb.Table;
   public readonly campaignsTable: dynamodb.Table;
@@ -79,6 +80,16 @@ export class DataLayer extends Construct {
         pointInTimeRecoveryEnabled: true,
       },
     };
+
+    this.contactsTable = new dynamodb.Table(this, 'Contacts', {
+      ...tableDefaults,
+      tableName: `${config.tenantName}-contacts`,
+      partitionKey: { name: 'contact_id', type: dynamodb.AttributeType.STRING },
+    });
+    this.contactsTable.addGlobalSecondaryIndex({
+      indexName: 'by-email-hash',
+      partitionKey: { name: 'email_hash', type: dynamodb.AttributeType.STRING },
+    });
 
     this.sendingDomainsTable = new dynamodb.Table(this, 'SendingDomains', {
       ...tableDefaults,
@@ -184,7 +195,7 @@ export class DataLayer extends Construct {
             { name: 'domain_id', type: 'string' },
             { name: 'campaign_id', type: 'string' },
             { name: 'list_id', type: 'string' },
-            { name: 'recipient_id', type: 'string' },
+            { name: 'contact_id', type: 'string' },
             { name: 'recipient_domain', type: 'string' },
             { name: 'ses_message_id', type: 'string' },
             { name: 'detail', type: 'string' },

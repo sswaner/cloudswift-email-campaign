@@ -4,6 +4,7 @@ export interface TokenPayload {
   v: number;
   kid: string;
   campaignId: string;
+  contactId: string;
   recipientId: string;
   issuedAt: number;
 }
@@ -28,6 +29,7 @@ export function generateMailtoToken(): string {
 export function createSecureToken(
   keys: TokenKeys,
   campaignId: string,
+  contactId: string,
   recipientId: string,
 ): { token: string; kid: string; payload: TokenPayload } {
   const kids = Object.keys(keys);
@@ -40,6 +42,7 @@ export function createSecureToken(
     v: 1,
     kid,
     campaignId,
+    contactId,
     recipientId,
     issuedAt,
   };

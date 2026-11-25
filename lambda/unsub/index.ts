@@ -3,11 +3,12 @@ import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { verifySecureToken, generateMailtoToken } from '../../lib/tokens';
 import { loadTokenKeys } from '../lib/keys';
-import { recordUnsubscribe, recordSubscribe, isSuppressed } from '../lib/unsubscribe';
+import { recordUnsubscribe, recordSubscribe, isSuppressed, resolveContactByEmailHash } from '../lib/unsubscribe';
 
 const docClient = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 
 interface Context {
+  contactsTable: string;
   unsubTokensTable: string;
   recipientsTable: string;
   domainId: string;
@@ -15,6 +16,7 @@ interface Context {
 
 function getContext(): Context {
   return {
+    contactsTable: requireEnv('CONTACTS_TABLE'),
     unsubTokensTable: requireEnv('UNSUB_TOKENS_TABLE'),
     recipientsTable: requireEnv('RECIPIENTS_TABLE'),
     domainId: requireEnv('DOMAIN_ID'),
@@ -50,7 +52,15 @@ function maskEmail(email: string): string {
   return `${maskedLocal}@${domain}`;
 }
 
-async function resolveSecureToken(ctx: Context, token: string): Promise<{ emailHash: string; campaignId: string; recipientId: string; email?: string } | null> {
+interface ResolvedContact {
+  contactId: string;
+  emailHash: string;
+  campaignId: string;
+  recipientId: string;
+  email?: string;
+}
+
+async function resolveSecureToken(ctx: Context, token: string): Promise<ResolvedContact | null> {
   const keys = await loadTokenKeys();
   let payload;
   try {
@@ -66,6 +76,7 @@ async function resolveSecureToken(ctx: Context, token: string): Promise<{ emailH
   );
   if (!recipient.Item) return null;
   return {
+    contactId: payload.contactId,
     emailHash: recipient.Item.email_hash as string,
     campaignId: payload.campaignId,
     recipientId: payload.recipientId,
@@ -73,7 +84,7 @@ async function resolveSecureToken(ctx: Context, token: string): Promise<{ emailH
   };
 }
 
-async function resolveMailtoToken(ctx: Context, token: string): Promise<{ emailHash: string; campaignId: string; recipientId: string; email?: string } | null> {
+async function resolveMailtoToken(ctx: Context, token: string): Promise<ResolvedContact | null> {
   const result = await docClient.send(
     new GetCommand({
       TableName: ctx.unsubTokensTable,
@@ -82,6 +93,7 @@ async function resolveMailtoToken(ctx: Context, token: string): Promise<{ emailH
   );
   if (!result.Item) return null;
   return {
+    contactId: result.Item.contact_id as string,
     emailHash: result.Item.email_hash as string,
     campaignId: result.Item.campaign_id as string,
     recipientId: result.Item.recipient_id as string,
@@ -122,9 +134,10 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
       return jsonResponse(400, { error: 'Invalid one-click request' });
     }
     const resolved = await resolveSecureToken(ctx, token);
-    if (!resolved) return htmlResponse(200, '');
+    if (!resolved) return { statusCode: 200, body: '' };
     await recordUnsubscribe({
       emailHash: resolved.emailHash,
+      contactId: resolved.contactId,
       campaignId: resolved.campaignId,
       recipientId: resolved.recipientId,
       method: 'one_click',
@@ -200,6 +213,7 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
     const reason = params.get('reason') || undefined;
     await recordUnsubscribe({
       emailHash: resolved.emailHash,
+      contactId: resolved.contactId,
       campaignId: resolved.campaignId,
       recipientId: resolved.recipientId,
       method: 'landing_page',
@@ -237,7 +251,7 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
     if (!email || !email.includes('@')) {
       return htmlResponse(400, page('Error', '<p>Please provide a valid email address.</p>'));
     }
-    // TODO: send confirmation email
+    // TODO: generate contact_id, store contact, send confirmation email
     return htmlResponse(200, page('Check your email', '<p>A confirmation email has been sent. Click the link in that email to complete your subscription.</p>'));
   }
 
