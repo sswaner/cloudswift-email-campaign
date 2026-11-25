@@ -118,7 +118,7 @@ export class UnsubscribeService extends Construct {
     });
     this.unsubTokensTable.grantReadData(mailtoFn);
     contactsTable.grantReadData(mailtoFn);
-    recipientsTable.grantReadData(mailtoFn);
+    recipientsTable.grantReadWriteData(mailtoFn);
     suppressionTable.grantReadWriteData(mailtoFn);
     subscriptionLedgerTable.grantWriteData(mailtoFn);
     eventBucket.grantWrite(mailtoFn);
