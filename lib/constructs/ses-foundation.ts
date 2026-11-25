@@ -22,13 +22,12 @@ export class SesFoundation extends Construct {
     super(scope, id);
     const { config, eventBucket } = props;
 
-    // Configuration set with reputation metrics, open/click tracking, auto validation, suppression
+    // Configuration set with reputation metrics, auto validation, suppression.
+    // Custom tracking domain t.lexara.vip will be added after DNS verification.
     this.configurationSet = new ses.ConfigurationSet(this, 'ConfigSet', {
       configurationSetName: config.configurationSetName,
       reputationMetrics: true,
       suppressionReasons: ses.SuppressionReasons.BOUNCES_AND_COMPLAINTS,
-      customTrackingRedirectDomain: `${config.trackingSubdomain}.${config.domain}`,
-      customTrackingHttpsPolicy: ses.HttpsPolicy.REQUIRE,
       autoValidationThreshold: ses.AutoValidationThreshold.HIGH,
     });
 
@@ -44,7 +43,7 @@ export class SesFoundation extends Construct {
     // SES event destination must use the default EventBridge bus
     this.eventBus = events.EventBus.fromEventBusName(this, 'SesEventBus', 'default');
 
-    // Firehose delivery stream -> S3
+    // Firehose delivery stream -> S3 (fed by EventBridge rule in Phase 2)
     const firehoseRole = new iam.Role(this, 'FirehoseRole', {
       assumedBy: new iam.ServicePrincipal('firehose.amazonaws.com'),
     });
@@ -56,26 +55,17 @@ export class SesFoundation extends Construct {
       extendedS3DestinationConfiguration: {
         roleArn: firehoseRole.roleArn,
         bucketArn: eventBucket.bucketArn,
-        prefix: 'raw-events/domain=!{partitionKeyFromQuery:domain_id}/dt=!{timestamp:yyyy-MM-dd-HH}/',
+        prefix: 'raw-events/dt=!{timestamp:yyyy-MM-dd-HH}/',
         errorOutputPrefix: 'errors/result=!{firehose:error-output-type}/dt=!{timestamp:yyyy-MM-dd-HH}/',
         bufferingHints: {
           intervalInSeconds: 60,
           sizeInMBs: 5,
         },
         compressionFormat: 'GZIP',
-        dynamicPartitioningConfiguration: {
-          enabled: true,
-        },
       },
     });
 
-    const deliveryStreamRef = firehose.DeliveryStream.fromDeliveryStreamArn(
-      this,
-      'EventStreamRef',
-      this.deliveryStream.attrArn,
-    );
-
-    // SES event destination: EventBridge
+    // SES event destination: EventBridge only (Firehose feed via EventBridge rule in Phase 2)
     new ses.ConfigurationSetEventDestination(this, 'EventBridgeDestination', {
       configurationSet: this.configurationSet,
       configurationSetEventDestinationName: 'eventbridge',
@@ -94,27 +84,7 @@ export class SesFoundation extends Construct {
       destination: ses.EventDestination.eventBus(this.eventBus),
     });
 
-    // SES event destination: Firehose (raw event lake)
-    new ses.ConfigurationSetEventDestination(this, 'FirehoseDestination', {
-      configurationSet: this.configurationSet,
-      configurationSetEventDestinationName: 'firehose',
-      events: [
-        ses.EmailSendingEvent.SEND,
-        ses.EmailSendingEvent.RENDERING_FAILURE,
-        ses.EmailSendingEvent.REJECT,
-        ses.EmailSendingEvent.DELIVERY,
-        ses.EmailSendingEvent.BOUNCE,
-        ses.EmailSendingEvent.COMPLAINT,
-        ses.EmailSendingEvent.DELIVERY_DELAY,
-        ses.EmailSendingEvent.OPEN,
-        ses.EmailSendingEvent.CLICK,
-        ses.EmailSendingEvent.SUBSCRIPTION,
-      ],
-      destination: ses.EventDestination.firehoseDeliveryStream({
-        deliveryStream: deliveryStreamRef,
-        role: firehoseRole,
-      }),
-    });
+    // TODO Phase 2: add EventBridge rule -> Firehose for the event lake
 
     // Outputs: DNS records to add in Cloudflare
     new cdk.CfnOutput(this, 'DkimRecord1', {
@@ -146,8 +116,8 @@ export class SesFoundation extends Construct {
     });
 
     new cdk.CfnOutput(this, 'TrackingDomainRecord', {
-      value: `${config.trackingSubdomain}.${config.domain} CNAME -> <lookup in SES console after deploy>`,
-      description: 'SES tracking domain CNAME target (shown in SES console)',
+      value: `${config.trackingSubdomain}.${config.domain} CNAME -> <lookup in SES console after DNS is added and t.lexara.vip is verified>`,
+      description: 'SES tracking domain CNAME target (add after verifying t.lexara.vip identity)',
     });
 
     new cdk.CfnOutput(this, 'SesSandboxWarning', {

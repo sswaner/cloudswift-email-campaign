@@ -191,10 +191,6 @@ export class DataLayer extends Construct {
             { name: 'detail', type: 'string' },
           ],
         },
-        partitionKeys: [
-          { name: 'domain_id', type: 'string' },
-          { name: 'dt', type: 'string' },
-        ],
       },
     });
 
