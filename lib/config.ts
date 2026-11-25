@@ -59,5 +59,5 @@ export const lexaraConfig: EmailCampaignConfig = {
   },
   dailySmartReachVolume: 0, // configurable; set via config or override
   queueableValidationVerdicts: ['HIGH', 'MEDIUM'],
-  enableCustomDomain: false, // enable after adding ACM validation records to Cloudflare
+  enableCustomDomain: true, // enable after adding ACM validation records to Cloudflare
 };
