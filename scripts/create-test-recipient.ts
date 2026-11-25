@@ -36,7 +36,7 @@ async function main() {
   const contactId = process.env.CONTACT_ID || ulid();
   const campaignId = 'test-campaign';
   const recipientId = 'test-recipient-001';
-  const email = 'shawnswaner@gmail.com';
+  const email = process.env.TEST_EMAIL || 'shawnswaner@gmail.com';
   const emailHash = hashEmail(email);
   const mailtoToken = generateMailtoToken();
 
