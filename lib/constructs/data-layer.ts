@@ -64,8 +64,7 @@ export class DataLayer extends Construct {
 
     this.inboundBucket = new s3.Bucket(this, 'InboundBucket', {
       bucketName: `${config.tenantName}-email-inbound-${cdk.Stack.of(this).account}-${cdk.Stack.of(this).region}`,
-      encryption: s3.BucketEncryption.KMS,
-      encryptionKey: this.encryptionKey,
+      encryption: s3.BucketEncryption.S3_MANAGED,
       lifecycleRules: [
         { expiration: cdk.Duration.days(90) },
       ],

@@ -34,6 +34,8 @@ export interface EmailCampaignConfig {
   dailySmartReachVolume: number;
   /** Validation verdicts that are queueable */
   queueableValidationVerdicts: ('HIGH' | 'MEDIUM')[];
+  /** Whether to create the API Gateway custom domain (requires DNS validation in Cloudflare) */
+  enableCustomDomain: boolean;
 }
 
 export const lexaraConfig: EmailCampaignConfig = {
@@ -57,4 +59,5 @@ export const lexaraConfig: EmailCampaignConfig = {
   },
   dailySmartReachVolume: 0, // configurable; set via config or override
   queueableValidationVerdicts: ['HIGH', 'MEDIUM'],
+  enableCustomDomain: false, // enable after adding ACM validation records to Cloudflare
 };

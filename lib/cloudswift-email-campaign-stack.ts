@@ -3,6 +3,7 @@ import { Construct } from 'constructs';
 import { lexaraConfig } from './config';
 import { DataLayer } from './constructs/data-layer';
 import { SesFoundation } from './constructs/ses-foundation';
+import { UnsubscribeService } from './constructs/unsubscribe-service';
 
 export class CloudswiftEmailCampaignStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -17,6 +18,17 @@ export class CloudswiftEmailCampaignStack extends cdk.Stack {
     new SesFoundation(this, 'SesFoundation', {
       config,
       eventBucket: dataLayer.eventBucket,
+    });
+
+    // Unsubscribe service: API, mailto parsing, suppression ledger
+    new UnsubscribeService(this, 'UnsubscribeService', {
+      config,
+      eventBucket: dataLayer.eventBucket,
+      listBucket: dataLayer.listBucket,
+      inboundBucket: dataLayer.inboundBucket,
+      recipientsTable: dataLayer.recipientsTable,
+      suppressionTable: dataLayer.suppressionTable,
+      subscriptionLedgerTable: dataLayer.subscriptionLedgerTable,
     });
 
     // Tags
