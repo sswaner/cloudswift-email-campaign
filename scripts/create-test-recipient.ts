@@ -34,7 +34,7 @@ async function main() {
   }
 
   const contactId = process.env.CONTACT_ID || ulid();
-  const campaignId = 'test-campaign';
+  const campaignId = process.env.CAMPAIGN_ID || 'test-campaign';
   const recipientId = 'test-recipient-001';
   const email = process.env.TEST_EMAIL || 'shawnswaner@gmail.com';
   const emailHash = hashEmail(email);

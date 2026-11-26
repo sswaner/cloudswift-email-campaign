@@ -124,6 +124,7 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
   const ctx = getContext();
   const method = event.requestContext.http.method;
   const path = event.rawPath || '';
+  console.log(`[unsub] ${method} ${path}`);
 
   // POST /u/{token} — RFC 8058 one-click unsubscribe
   const oneClickMatch = path.match(/^\/u\/([^/]+)$/);
@@ -134,7 +135,11 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
       return jsonResponse(400, { error: 'Invalid one-click request' });
     }
     const resolved = await resolveSecureToken(ctx, token);
-    if (!resolved) return { statusCode: 200, body: '' };
+    if (!resolved) {
+      console.log('[unsub] one-click: invalid token');
+      return { statusCode: 200, body: '' };
+    }
+    console.log('[unsub] one-click: resolved', resolved.emailHash, resolved.contactId);
     await recordUnsubscribe({
       emailHash: resolved.emailHash,
       contactId: resolved.contactId,
@@ -206,8 +211,10 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
     const token = pageMatch[1];
     const resolved = await resolveSecureToken(ctx, token);
     if (!resolved) {
+      console.log('[unsub] landing-page POST: invalid token');
       return htmlResponse(200, page('Unsubscribed', '<p>You have been unsubscribed.</p>'));
     }
+    console.log('[unsub] landing-page POST: resolved', resolved.emailHash, resolved.contactId);
     const body = event.body ? Buffer.from(event.body, event.isBase64Encoded ? 'base64' : 'utf-8').toString('utf-8') : '';
     const params = new URLSearchParams(body);
     const reason = params.get('reason') || undefined;
@@ -222,6 +229,7 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
       sourceCampaignId: resolved.campaignId,
       unsubscribedAt: new Date().toISOString(),
     });
+    console.log('[unsub] landing-page POST: recorded unsubscribe');
     const bodyHtml = page('Unsubscribed', `
       <h1>You are unsubscribed</h1>
       <p>${resolved.email ? maskEmail(resolved.email) : 'This address'} will no longer receive Lexara emails.</p>
