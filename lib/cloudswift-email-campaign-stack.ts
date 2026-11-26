@@ -39,6 +39,7 @@ export class CloudswiftEmailCampaignStack extends cdk.Stack {
       recipientsTable: dataLayer.recipientsTable,
       unsubTokensTable: unsubscribeService.unsubTokensTable,
       contactsTable: dataLayer.contactsTable,
+      tokenKeysSecretArn: unsubscribeService.tokenKeysSecret.secretArn,
       domainId: 'michigan-bar-2026', // TODO: make dynamic per campaign
     });
 

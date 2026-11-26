@@ -12,6 +12,7 @@ export interface DispatcherProps {
   recipientsTable: dynamodb.Table;
   unsubTokensTable: dynamodb.Table;
   contactsTable: dynamodb.Table;
+  tokenKeysSecretArn: string;
   domainId: string;
 }
 
@@ -21,7 +22,7 @@ export class Dispatcher extends Construct {
 
   constructor(scope: Construct, id: string, props: DispatcherProps) {
     super(scope, id);
-    const { config, recipientsTable, unsubTokensTable, contactsTable, domainId } = props;
+    const { config, recipientsTable, unsubTokensTable, contactsTable, tokenKeysSecretArn, domainId } = props;
 
     this.function = new lambda.NodejsFunction(this, 'DispatcherFunction', {
       entry: 'lambda/dispatcher/index.ts',
@@ -30,12 +31,13 @@ export class Dispatcher extends Construct {
       timeout: cdk.Duration.seconds(60),
       memorySize: 512,
       environment: {
-        FROM_ADDRESS: `${config.fromDisplayName} <${config.fromLocalPart}@${config.domain}>`,
+        FROM_ADDRESS: `"${config.fromDisplayName}" <${config.fromLocalPart}@${config.domain}>`,
         REPLY_TO_ADDRESS: config.replyToAddress,
         CONFIGURATION_SET_NAME: config.configurationSetName,
         RECIPIENTS_TABLE: recipientsTable.tableName,
         UNSUB_TOKENS_TABLE: unsubTokensTable.tableName,
         CONTACTS_TABLE: contactsTable.tableName,
+        TOKEN_KEYS_SECRET_ARN: tokenKeysSecretArn,
         DOMAIN_ID: domainId,
         MAX_PER_INVOCATION: '1',
         SEND_WINDOW_TIMEZONE: config.sendWindow.timezone,
@@ -56,6 +58,14 @@ export class Dispatcher extends Construct {
     recipientsTable.grantWriteData(this.function);
     unsubTokensTable.grantWriteData(this.function);
     contactsTable.grantReadData(this.function);
+
+    // Secrets Manager read for token signing keys
+    this.function.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['secretsmanager:GetSecretValue'],
+        resources: [tokenKeysSecretArn],
+      }),
+    );
 
     // SES v2 send permissions
     this.function.addToRolePolicy(

@@ -53,9 +53,9 @@ export const lexaraConfig: EmailCampaignConfig = {
   optoutSubdomain: 'optout',
   sendWindow: {
     timezone: 'America/Detroit',
-    startLocal: '08:00',
-    endLocal: '17:00',
-    days: [1, 2, 3, 4, 5], // Mon-Fri
+    startLocal: '00:00',
+    endLocal: '23:59',
+    days: [0, 1, 2, 3, 4, 5, 6], // Temporarily all days for testing
   },
   dailySmartReachVolume: 0, // configurable; set via config or override
   queueableValidationVerdicts: ['HIGH', 'MEDIUM'],
